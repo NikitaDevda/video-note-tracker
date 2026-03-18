@@ -17,21 +17,43 @@ def download_audio(youtube_url):
     YouTube video se audio download karo
     yt_dlp use hota hai — best YouTube downloader
     """
+    # ydl_opts = {
+    #     'format': 'bestaudio/best',
+    #     'outtmpl': 'audio.%(ext)s',
+    #     'postprocessors': [{
+    #         'key': 'FFmpegExtractAudio',
+    #         'preferredcodec': 'mp3',
+    #     }],
+    #     'quiet': True
+    # }
     ydl_opts = {
         'format': 'bestaudio/best',
-        'outtmpl': 'audio.%(ext)s',
+        'outtmpl': '/tmp/audio.%(ext)s',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
         }],
-        'quiet': True
+        'quiet': True,
+        # ✅ Yeh add karo — YouTube block se bachao
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        'cookiefile': None,
+        'nocheckcertificate': True,
     }
+    
+    # with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    #     info = ydl.extract_info(youtube_url, download=True)
+    #     title = info.get('title', 'Video')
+    #     duration = info.get('duration', 0)
+    # print(f"✅ Audio downloaded: {title}")
+    # return "audio.mp3", title, duration
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(youtube_url, download=True)
         title = info.get('title', 'Video')
         duration = info.get('duration', 0)
-    print(f"✅ Audio downloaded: {title}")
-    return "audio.mp3", title, duration
+    return '/tmp/audio.mp3', title, duration
 
 
 # ─── STEP 2: SPEECH TO TEXT ───────────────────
