@@ -33,29 +33,27 @@ def get_transcript_direct(youtube_url):
     if not video_id:
         raise ValueError("❌ Invalid YouTube URL!")
 
-    print(f"✅ Video ID: {video_id}")
-
     try:
-        # ✅ NEW API — FetchedTranscript object
         from youtube_transcript_api import YouTubeTranscriptApi
+        from youtube_transcript_api.proxies import WebshareProxyConfig
+
+        # Free proxy try karo
+        proxy_config = WebshareProxyConfig(
+            proxy_username="",
+            proxy_password="",
+        )
         
-        ytt_api = YouTubeTranscriptApi()
+        ytt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
         fetched = ytt_api.fetch(video_id)
         transcript_list = list(fetched)
 
     except Exception as e:
-        raise ValueError(
-            f"❌ Transcript nahi mila! "
-            f"Video mein captions hone chahiye.\nError: {e}"
-        )
+        raise ValueError(f"❌ Error: {e}")
 
-    # Full transcript
     transcript = " ".join([t.get('text', '') for t in transcript_list])
-
-    # Timestamps
     timestamps = []
     for t in transcript_list:
-        start = t.get('start', 0)
+        start   = t.get('start', 0)
         minutes = int(start // 60)
         seconds = int(start % 60)
         timestamps.append({
@@ -63,8 +61,6 @@ def get_transcript_direct(youtube_url):
             'text': t.get('text', '')
         })
 
-    print(f"✅ Transcript: {len(transcript)} chars")
-    print(f"✅ Timestamps: {len(timestamps)}")
     return transcript, timestamps
 
 # ─── STEP 3: VIDEO TITLE FETCH ───────────────
