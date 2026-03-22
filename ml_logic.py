@@ -36,10 +36,13 @@ def get_transcript_direct(youtube_url):
     print(f"✅ Video ID: {video_id}")
 
     try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(
-            video_id,
-            languages=['en', 'hi', 'en-US', 'en-GB', 'en-IN']
-        )
+        # ✅ NEW API — FetchedTranscript object
+        from youtube_transcript_api import YouTubeTranscriptApi
+        
+        ytt_api = YouTubeTranscriptApi()
+        fetched = ytt_api.fetch(video_id)
+        transcript_list = list(fetched)
+
     except Exception as e:
         raise ValueError(
             f"❌ Transcript nahi mila! "
@@ -47,16 +50,17 @@ def get_transcript_direct(youtube_url):
         )
 
     # Full transcript
-    transcript = " ".join([t['text'] for t in transcript_list])
+    transcript = " ".join([t.get('text', '') for t in transcript_list])
 
     # Timestamps
     timestamps = []
     for t in transcript_list:
-        minutes = int(t['start'] // 60)
-        seconds = int(t['start'] % 60)
+        start = t.get('start', 0)
+        minutes = int(start // 60)
+        seconds = int(start % 60)
         timestamps.append({
             'time': f"{minutes:02d}:{seconds:02d}",
-            'text': t['text']
+            'text': t.get('text', '')
         })
 
     print(f"✅ Transcript: {len(transcript)} chars")
