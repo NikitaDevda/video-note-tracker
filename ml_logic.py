@@ -196,8 +196,6 @@
 
 
 
-
-
 # ─── ALL IMPORTS ─────────────────────────────
 import os
 import re
@@ -212,23 +210,49 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-# ─── STEP 1: TRANSCRIPT FETCH ─────────────────
+# ─── STEP 1: VIDEO ID EXTRACT ─────────────────
+def extract_video_id(youtube_url):
+    """
+    Har tarah ke YouTube URL se video ID nikalo
+    """
+    youtube_url = youtube_url.strip()
+
+    patterns = [
+        r"(?:v=)([a-zA-Z0-9_-]{11})",          # youtube.com/watch?v=
+        r"(?:youtu\.be/)([a-zA-Z0-9_-]{11})",   # youtu.be/
+        r"(?:embed/)([a-zA-Z0-9_-]{11})",        # youtube.com/embed/
+        r"(?:shorts/)([a-zA-Z0-9_-]{11})",       # youtube.com/shorts/
+        r"(?:live/)([a-zA-Z0-9_-]{11})",         # youtube.com/live/
+        r"^([a-zA-Z0-9_-]{11})$",                # sirf video ID
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, youtube_url)
+        if match:
+            return match.group(1)
+
+    raise ValueError(
+        "❌ Invalid YouTube URL!\n"
+        "Supported formats:\n"
+        "• https://www.youtube.com/watch?v=VIDEO_ID\n"
+        "• https://youtu.be/VIDEO_ID\n"
+        "• https://youtube.com/shorts/VIDEO_ID\n"
+        "• https://youtube.com/live/VIDEO_ID"
+    )
+
+
+# ─── STEP 2: TRANSCRIPT FETCH ─────────────────
 def get_transcript_from_url(youtube_url):
     """
-    YouTube URL se video ID nikalo
-    Transcript API se text lo — no download needed!
+    YouTube URL se transcript fetch karo
+    English, Hindi, ya koi bhi language support
     Streamlit Cloud pe bhi kaam karta hai
     """
-    # Video ID extract karo
-    match = re.search(r"(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})", youtube_url)
-    if not match:
-        raise ValueError("Invalid YouTube URL!")
-
-    video_id = match.group(1)
+    video_id = extract_video_id(youtube_url)
     print(f"🎬 Fetching transcript for video: {video_id}")
 
-    # ── Auto language detect (English + Hindi + any) ──
     ytt_api = YouTubeTranscriptApi()
+
     try:
         # Pehle English try karo
         fetched = ytt_api.fetch(video_id, languages=['en'])
@@ -237,10 +261,27 @@ def get_transcript_from_url(youtube_url):
             # Phir Hindi try karo
             fetched = ytt_api.fetch(video_id, languages=['hi'])
         except:
-            # Jo bhi available ho woh lo
-            fetched = ytt_api.fetch(video_id)
+            try:
+                # Phir regional English try karo
+                fetched = ytt_api.fetch(video_id, languages=['en-IN', 'en-US', 'en-GB'])
+            except:
+                try:
+                    # Jo bhi available ho woh lo
+                    fetched = ytt_api.fetch(video_id)
+                except Exception as e:
+                    raise ValueError(
+                        "❌ Transcript fetch nahi hua!\n"
+                        "Possible reasons:\n"
+                        "• Video India mein available nahi\n"
+                        "• Video private/deleted hai\n"
+                        "• Is video mein captions disabled hain\n\n"
+                        "💡 Koi aur video try karo jisme CC button dikhta ho!"
+                    )
 
     transcript_list = fetched.snippets
+
+    if not transcript_list:
+        raise ValueError("❌ Transcript empty hai! Koi aur video try karo.")
 
     # Full text banao
     full_text = " ".join([t.text for t in transcript_list])
@@ -255,7 +296,7 @@ def get_transcript_from_url(youtube_url):
     return full_text, segments
 
 
-# ─── STEP 2: TIMESTAMPS BANANA ────────────────
+# ─── STEP 3: TIMESTAMPS BANANA ────────────────
 def extract_timestamps(segments):
     """
     Har segment ka timestamp extract karo
@@ -279,10 +320,11 @@ def extract_timestamps(segments):
     return timestamps
 
 
-# ─── STEP 3: STRUCTURED NOTES BANANA ──────────
+# ─── STEP 4: STRUCTURED NOTES BANANA ──────────
 def generate_notes(transcript, title):
     """
     LLM se structured notes generate karo
+    Notes hamesha English mein — chahe transcript Hindi mein ho
     """
     llm = setup_llm()
 
@@ -290,27 +332,27 @@ def generate_notes(transcript, title):
     You are an expert note-taker.
     Create structured notes from this video transcript.
     IMPORTANT: Always write notes in ENGLISH, even if transcript is in Hindi or any other language.
-    
+
     Video Title: {title}
-    
+
     Transcript: {transcript[:3000]}
-    
+
     Create notes in this EXACT format:
-    
+
     ## 📌 Main Topics
     - Topic 1
     - Topic 2
     - Topic 3
-    
+
     ## 📝 Key Points
     - Point 1
     - Point 2
     - Point 3
-    
+
     ## ✅ Action Items
     - Action 1
     - Action 2
-    
+
     ## 💡 Summary
     2-3 line summary here
     """
@@ -320,7 +362,7 @@ def generate_notes(transcript, title):
     return response.content
 
 
-# ─── STEP 4: EMBEDDINGS + FAISS ───────────────
+# ─── STEP 5: EMBEDDINGS + FAISS ───────────────
 def create_vectorstore_from_transcript(transcript):
     """
     Transcript ko FAISS mein store karo
@@ -342,7 +384,7 @@ def create_vectorstore_from_transcript(transcript):
     return vectorstore
 
 
-# ─── STEP 5: Q&A ON VIDEO ─────────────────────
+# ─── STEP 6: Q&A ON VIDEO ─────────────────────
 def answer_question(vectorstore, question):
     """
     RAG pipeline se question ka answer lo
@@ -357,7 +399,8 @@ def answer_question(vectorstore, question):
     prompt = f"""
     Answer based on video transcript context only.
     If not in context, say "Not covered in video".
-    
+    Answer in the same language as the question.
+
     Context: {context}
     Question: {question}
     Answer:
@@ -368,11 +411,26 @@ def answer_question(vectorstore, question):
 
 # ─── LLM SETUP ────────────────────────────────
 def setup_llm():
+    api_key = None
+
+    # Pehle Streamlit secrets try karo
     try:
         import streamlit as st
-        api_key = st.secrets["GROQ_API_KEY"]
+        api_key = st.secrets.get("GROQ_API_KEY")
     except:
+        pass
+
+    # Phir environment variable try karo
+    if not api_key:
         api_key = os.getenv("GROQ_API_KEY")
+
+    # Agar phir bhi nahi mila
+    if not api_key:
+        raise ValueError(
+            "❌ GROQ_API_KEY nahi mili!\n"
+            "Streamlit Cloud pe:\n"
+            "Settings → Secrets → GROQ_API_KEY = 'your_key_here'"
+        )
 
     llm = ChatGroq(
         api_key=api_key,
@@ -388,16 +446,16 @@ def process_video(youtube_url):
     Complete pipeline:
     URL → Transcript → Notes + Timestamps + QA
     """
-    # Step 1: Transcript fetch karo
+    # Step 1+2: Transcript fetch karo
     transcript, segments = get_transcript_from_url(youtube_url)
 
-    # Step 2: Timestamps
+    # Step 3: Timestamps
     timestamps = extract_timestamps(segments)
 
-    # Step 3: Notes (LLM)
+    # Step 4: Notes (LLM)
     notes = generate_notes(transcript, "YouTube Video")
 
-    # Step 4: Vector Store (ML)
+    # Step 5: Vector Store (ML)
     vectorstore = create_vectorstore_from_transcript(transcript)
 
     return {
