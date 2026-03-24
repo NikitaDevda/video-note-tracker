@@ -195,7 +195,6 @@
 
 
 
-
 # ─── ALL IMPORTS ─────────────────────────────
 import os
 import re
@@ -218,12 +217,12 @@ def extract_video_id(youtube_url):
     youtube_url = youtube_url.strip()
 
     patterns = [
-        r"(?:v=)([a-zA-Z0-9_-]{11})",          # youtube.com/watch?v=
-        r"(?:youtu\.be/)([a-zA-Z0-9_-]{11})",   # youtu.be/
-        r"(?:embed/)([a-zA-Z0-9_-]{11})",        # youtube.com/embed/
-        r"(?:shorts/)([a-zA-Z0-9_-]{11})",       # youtube.com/shorts/
-        r"(?:live/)([a-zA-Z0-9_-]{11})",         # youtube.com/live/
-        r"^([a-zA-Z0-9_-]{11})$",                # sirf video ID
+        r"(?:v=)([a-zA-Z0-9_-]{11})",
+        r"(?:youtu\.be/)([a-zA-Z0-9_-]{11})",
+        r"(?:embed/)([a-zA-Z0-9_-]{11})",
+        r"(?:shorts/)([a-zA-Z0-9_-]{11})",
+        r"(?:live/)([a-zA-Z0-9_-]{11})",
+        r"^([a-zA-Z0-9_-]{11})$",
     ]
 
     for pattern in patterns:
@@ -236,17 +235,15 @@ def extract_video_id(youtube_url):
         "Supported formats:\n"
         "• https://www.youtube.com/watch?v=VIDEO_ID\n"
         "• https://youtu.be/VIDEO_ID\n"
-        "• https://youtube.com/shorts/VIDEO_ID\n"
-        "• https://youtube.com/live/VIDEO_ID"
+        "• https://youtube.com/shorts/VIDEO_ID"
     )
 
 
 # ─── STEP 2: TRANSCRIPT FETCH ─────────────────
 def get_transcript_from_url(youtube_url):
     """
-    YouTube URL se transcript fetch karo
-    English, Hindi, ya koi bhi language support
-    Streamlit Cloud pe bhi kaam karta hai
+    Pehle available languages list karo
+    Phir jo bhi available ho woh fetch karo
     """
     video_id = extract_video_id(youtube_url)
     print(f"🎬 Fetching transcript for video: {video_id}")
@@ -254,42 +251,57 @@ def get_transcript_from_url(youtube_url):
     ytt_api = YouTubeTranscriptApi()
 
     try:
-        # Pehle English try karo
-        fetched = ytt_api.fetch(video_id, languages=['en'])
-    except:
-        try:
-            # Phir Hindi try karo
-            fetched = ytt_api.fetch(video_id, languages=['hi'])
-        except:
-            try:
-                # Phir regional English try karo
-                fetched = ytt_api.fetch(video_id, languages=['en-IN', 'en-US', 'en-GB'])
-            except:
-                try:
-                    # Jo bhi available ho woh lo
-                    fetched = ytt_api.fetch(video_id)
-                except Exception as e:
-                    raise ValueError(
-                        "❌ Transcript fetch nahi hua!\n"
-                        "Possible reasons:\n"
-                        "• Video India mein available nahi\n"
-                        "• Video private/deleted hai\n"
-                        "• Is video mein captions disabled hain\n\n"
-                        "💡 Koi aur video try karo jisme CC button dikhta ho!"
-                    )
+        # Pehle available transcripts list karo
+        transcript_list = ytt_api.list(video_id)
 
-    transcript_list = fetched.snippets
+        # Available languages collect karo
+        available = []
+        for t in transcript_list:
+            available.append(t.language_code)
+        print(f"Available languages: {available}")
 
-    if not transcript_list:
+        # Priority order mein fetch karo
+        priority = ['en', 'hi', 'en-IN', 'en-US', 'en-GB', 'en-AU']
+
+        fetched = None
+
+        # Pehle priority languages try karo
+        for lang in priority:
+            if lang in available:
+                fetched = ytt_api.fetch(video_id, languages=[lang])
+                print(f"✅ Fetched in language: {lang}")
+                break
+
+        # Agar priority mein nahi mila toh pehli available language lo
+        if fetched is None and available:
+            fetched = ytt_api.fetch(video_id, languages=[available[0]])
+            print(f"✅ Fetched in language: {available[0]}")
+
+        if fetched is None:
+            raise ValueError("No transcript available")
+
+    except Exception as e:
+        raise ValueError(
+            f"❌ Transcript fetch nahi hua!\n"
+            f"Possible reasons:\n"
+            f"• Video private/deleted hai\n"
+            f"• Is video mein captions disabled hain\n\n"
+            f"💡 YouTube pe video open karo → '...' menu → 'Open transcript' option check karo\n\n"
+            f"Error: {str(e)}"
+        )
+
+    snippets = fetched.snippets
+
+    if not snippets:
         raise ValueError("❌ Transcript empty hai! Koi aur video try karo.")
 
     # Full text banao
-    full_text = " ".join([t.text for t in transcript_list])
+    full_text = " ".join([t.text for t in snippets])
 
     # Segments banao (timestamps ke liye)
     segments = [
         {'start': t.start, 'text': t.text}
-        for t in transcript_list
+        for t in snippets
     ]
 
     print(f"✅ Transcript fetched: {len(full_text)} chars")
@@ -324,7 +336,7 @@ def extract_timestamps(segments):
 def generate_notes(transcript, title):
     """
     LLM se structured notes generate karo
-    Notes hamesha English mein — chahe transcript Hindi mein ho
+    Notes hamesha English mein
     """
     llm = setup_llm()
 
@@ -413,18 +425,15 @@ def answer_question(vectorstore, question):
 def setup_llm():
     api_key = None
 
-    # Pehle Streamlit secrets try karo
     try:
         import streamlit as st
         api_key = st.secrets.get("GROQ_API_KEY")
     except:
         pass
 
-    # Phir environment variable try karo
     if not api_key:
         api_key = os.getenv("GROQ_API_KEY")
 
-    # Agar phir bhi nahi mila
     if not api_key:
         raise ValueError(
             "❌ GROQ_API_KEY nahi mili!\n"
