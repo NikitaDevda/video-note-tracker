@@ -198,7 +198,6 @@
 
 
 
-
 # ─── ALL IMPORTS ─────────────────────────────
 import os
 import re
@@ -228,9 +227,19 @@ def get_transcript_from_url(youtube_url):
     video_id = match.group(1)
     print(f"🎬 Fetching transcript for video: {video_id}")
 
-    # ── New API syntax (v1.x+) ──
+    # ── Auto language detect (English + Hindi + any) ──
     ytt_api = YouTubeTranscriptApi()
-    fetched = ytt_api.fetch(video_id)
+    try:
+        # Pehle English try karo
+        fetched = ytt_api.fetch(video_id, languages=['en'])
+    except:
+        try:
+            # Phir Hindi try karo
+            fetched = ytt_api.fetch(video_id, languages=['hi'])
+        except:
+            # Jo bhi available ho woh lo
+            fetched = ytt_api.fetch(video_id)
+
     transcript_list = fetched.snippets
 
     # Full text banao
@@ -280,6 +289,7 @@ def generate_notes(transcript, title):
     prompt = f"""
     You are an expert note-taker.
     Create structured notes from this video transcript.
+    IMPORTANT: Always write notes in ENGLISH, even if transcript is in Hindi or any other language.
     
     Video Title: {title}
     
