@@ -199,7 +199,6 @@
 
 
 
-
 # ─── ALL IMPORTS ─────────────────────────────
 import os
 import re
@@ -229,15 +228,17 @@ def get_transcript_from_url(youtube_url):
     video_id = match.group(1)
     print(f"🎬 Fetching transcript for video: {video_id}")
 
-    # Transcript fetch karo
-    transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+    # ── New API syntax (v1.x+) ──
+    ytt_api = YouTubeTranscriptApi()
+    fetched = ytt_api.fetch(video_id)
+    transcript_list = fetched.snippets
 
     # Full text banao
-    full_text = " ".join([t['text'] for t in transcript_list])
+    full_text = " ".join([t.text for t in transcript_list])
 
     # Segments banao (timestamps ke liye)
     segments = [
-        {'start': t['start'], 'text': t['text']}
+        {'start': t.start, 'text': t.text}
         for t in transcript_list
     ]
 
