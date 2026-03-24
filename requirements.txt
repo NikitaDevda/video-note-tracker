@@ -7,5 +7,3 @@ faiss-cpu
 sentence-transformers
 python-dotenv
 youtube-transcript-api
-yt-dlp
-openai-whisper
